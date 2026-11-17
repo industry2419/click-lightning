@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Click Lightning · Demo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./demo.css" />
+</head>
+<body>
+<main class="stage">
+  <div class="hint">
+    <h1>点击任意位置，试试 <em>十万伏特</em></h1>
+    <p>鼠标左键 / 触控笔触发 · 触屏跳过 · 面板区域不触发</p>
+  </div>
+</main>
+
+<aside class="panel" data-no-fx>
+  <div class="panel-head">
+    <strong>参数调试</strong>
+    <span>拖动实时生效</span>
+  </div>
+  <div class="row">
+    <label for="mode">模式</label>
+    <select id="mode">
+      <option value="full">全量放电</option>
+      <option value="subtle">减弱（仅光环）</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="color">颜色</label>
+    <input id="color" type="color" value="#ffd400" />
+  </div>
+  <div class="row">
+    <label for="scale">规模</label>
+    <input id="scale" type="range" min="0.5" max="2" step="0.1" value="1" />
+    <output id="scaleOut">1.0×</output>
+  </div>
+  <div class="row">
+    <label for="bolts">闪电数</label>
+    <input id="bolts" type="range" min="4" max="14" step="1" value="8" />
+    <output id="boltsOut">8</output>
+  </div>
+</aside>
+
+<script type="module" src="./demo.ts"></script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>点击闪电特效 · 原型</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bolt: #ffd400;
+    --bolt-core: #fffde7;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: radial-gradient(1200px 800px at 50% 18%, #1c1d24 0%, #0c0d11 72%);
+    color: #e8e5f0;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  #fx {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .stage {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 1;
+  }
+  .hint { text-align: center; user-select: none; pointer-events: none; }
+  .hint h1 {
+    margin: 0 0 12px;
+    font-size: clamp(26px, 4vw, 40px);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+  }
+  .hint h1 em {
+    font-style: normal;
+    color: var(--bolt);
+    text-shadow: 0 0 24px rgba(255, 212, 0, 0.45);
+  }
+  .hint p { margin: 0; color: #8d8a9c; font-size: 14px; }
+
+  .panel {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 20;
+    width: min(620px, calc(100vw - 32px));
+    padding: 16px 20px 14px;
+    border-radius: 22px;
+    background: rgba(20, 21, 27, 0.74);
+    border: 1px solid rgba(255, 212, 0, 0.16);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  }
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .panel-head strong { font-size: 13px; letter-spacing: 0.08em; color: #cfc9df; }
+  .panel-head span { font-size: 11px; color: #6f6c80; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 22px;
+  }
+  .row { display: grid; grid-template-columns: 58px 1fr 40px; align-items: center; gap: 10px; }
+  .row label { font-size: 12px; color: #a7a3b8; }
+  .row output { font-size: 11px; color: #ffd86b; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--bolt); height: 18px; }
+  .toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .toggles label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: #b3afc4;
+    cursor: pointer;
+  }
+  input[type="checkbox"] { accent-color: var(--bolt); width: 15px; height: 15px; }
+  @media (max-width: 560px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+
+<main class="stage">
+  <div class="hint">
+    <h1>点击任意位置，试试 <em>十万伏特</em></h1>
+    <p>鼠标左键 / 空格键触发 · 触屏不触发以免影响滚动</p>
+  </div>
+</main>
+
+<aside class="panel" data-no-fx>
+  <div class="panel-head">
+    <strong>参数调试</strong>
+    <span>拖动实时生效</span>
+  </div>
+  <div class="grid">
+    <div class="row">
+      <label for="scale">规模</label>
+      <input id="scale" type="range" min="0.5" max="2" step="0.1" value="1" />
+      <output id="scaleOut">1.0×</output>
+    </div>
+    <div class="row">
+      <label for="bolts">闪电数</label>
+      <input id="bolts" type="range" min="4" max="14" step="1" value="8" />
+      <output id="boltsOut">8</output>
+    </div>
+    <div class="row">
+      <label for="duration">持续</label>
+      <input id="duration" type="range" min="140" max="420" step="20" value="220" />
+      <output id="durationOut">220ms</output>
+    </div>
+    <div class="row">
+      <label for="glow">辉光</label>
+      <input id="glow" type="range" min="0" max="2" step="0.1" value="1" />
+      <output id="glowOut">1.0×</output>
+    </div>
+  </div>
+  <div class="toggles">
+    <label><input id="sparks" type="checkbox" checked /> 火星粒子</label>
+    <label><input id="flash" type="checkbox" checked /> 轻微全屏闪</label>
+    <label><input id="reduced" type="checkbox" /> 模拟「减弱动效」</label>
+  </div>
+</aside>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('fx');
+  const ctx = canvas.getContext('2d');
+
+  const cfg = {
+    scale: 1,
+    bolts: 8,
+    duration: 220,
+    glow: 1,
+    sparks: true,
+    flash: true,
+    reduced: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  };
+
+  let vw = 0;
+  let vh = 0;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    vw = window.innerWidth;
+    vh = window.innerHeight;
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ---------- 几何：把一条直线递归折成闪电 ----------
+  function jagged(x0, y0, x1, y1, depth, offset) {
+    const pts = [[x0, y0]];
+    (function sub(ax, ay, bx, by, d, off) {
+      if (d <= 0) {
+        pts.push([bx, by]);
+        return;
+      }
+      const mx = (ax + bx) / 2;
+      const my = (ay + by) / 2;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      // 垂直方向随机偏移，越到末端偏移越小
+      const k = (Math.random() - 0.5) * 2 * off;
+      const px = mx + (-dy / len) * k;
+      const py = my + (dx / len) * k;
+      sub(ax, ay, px, py, d - 1, off * 0.55);
+      sub(px, py, bx, by, d - 1, off * 0.55);
+    })(x0, y0, x1, y1, depth, offset);
+    return pts;
+  }
+
+  function trace(pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  }
+
+  function drawBolt(pts, width, alpha) {
+    const glow = cfg.glow;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    trace(pts);
+    if (glow > 0) {
+      ctx.strokeStyle = 'rgba(255, 190, 0, ' + (0.13 * alpha * glow).toFixed(3) + ')';
+      ctx.lineWidth = width * 7;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 205, 10, ' + (0.3 * alpha * glow).toFixed(3) + ')';
+      ctx.lineWidth = width * 3.2;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255, 212, 0, ' + (0.75 * alpha).toFixed(3) + ')';
+    ctx.lineWidth = width * 1.6;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 253, 231, ' + alpha.toFixed(3) + ')';
+    ctx.lineWidth = width;
+    ctx.stroke();
+  }
+
+  // ---------- 特效对象 ----------
+  const bolts = [];   // 闪电主干/辐射分支
+  const sparks = [];  // 火星
+  const rings = [];   // 冲击环
+  const bursts = [];  // 点击点中心爆闪
+  let screenFlash = 0;
+
+  const MAX_BOLTS = 220;
+
+  function addBolt(x, y, angle, len, width, life, depth) {
+    if (bolts.length >= MAX_BOLTS) return;
+    bolts.push({
+      x, y, angle, len, width, life,
+      depth,
+      age: 0,
+      pts: null,
+      nextRegen: 0,
+    });
+  }
+
+  function burst(cx, cy) {
+    const scale = cfg.scale;
+    const life = cfg.duration;
+
+    if (cfg.reduced) {
+      // 减弱动效：只留一个快速的扩散光圈
+      rings.push({ x: cx, y: cy, age: 0, life: 260, r1: 44 * scale });
+      ensureLoop();
+      return;
+    }
+
+    // 主干：1~2 条较粗的放电
+    const mainCount = Math.random() < 0.35 ? 2 : 1;
+    for (let i = 0; i < mainCount; i++) {
+      addBolt(
+        cx, cy,
+        Math.random() * Math.PI * 2,
+        (95 + Math.random() * 55) * scale,
+        2.4,
+        life * (0.85 + Math.random() * 0.3),
+        4
+      );
+    }
+
+    // 辐射分支：均匀分布 + 抖动，形成“炸开”的形态
+    const n = cfg.bolts;
+    const slot = (Math.PI * 2) / n;
+    for (let i = 0; i < n; i++) {
+      const angle = slot * i + (Math.random() - 0.5) * slot * 0.8;
+      const len = (42 + Math.random() * 72) * scale;
+      addBolt(cx, cy, angle, len, 1.6, life * (0.55 + Math.random() * 0.45), 3);
+
+      // 分叉：从主干 55%~80% 处再劈出一道短弧
+      if (Math.random() < 0.6) {
+        const at = 0.55 + Math.random() * 0.25;
+        const forkAngle = angle + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5);
+        addBolt(
+          cx + Math.cos(angle) * len * at,
+          cy + Math.sin(angle) * len * at,
+          forkAngle,
+          len * (0.28 + Math.random() * 0.25),
+          1.1,
+          life * (0.4 + Math.random() * 0.3),
+          2
+        );
+      }
+    }
+
+    // 冲击环
+    rings.push({ x: cx, y: cy, age: 0, life: life * 1.15, r1: 74 * scale });
+
+    // 中心爆闪
+    bursts.push({ x: cx, y: cy, age: 0, life: 170, r1: 78 * scale });
+
+    // 火星
+    if (cfg.sparks) {
+      const count = 10 + Math.round(Math.random() * 5);
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = (1.4 + Math.random() * 3.1) * Math.sqrt(scale);
+        sparks.push({
+          x: cx, y: cy,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp - 0.4,
+          age: 0,
+          life: 380 + Math.random() * 380,
+          size: 1.3 + Math.random() * 2.1,
+        });
+      }
+    }
+
+    if (cfg.flash) screenFlash = 1;
+
+    ensureLoop();
+  }
+
+  // ---------- 渲染循环（空闲时停止 rAF） ----------
+  let raf = 0;
+  let prev = 0;
+
+  function ensureLoop() {
+    if (!raf) {
+      prev = performance.now();
+      raf = requestAnimationFrame(tick);
+    }
+  }
+
+  function tick(now) {
+    const dt = Math.min(now - prev, 48);
+    prev = now;
+
+    ctx.clearRect(0, 0, vw, vh);
+    const k = dt / 16.67;
+
+    // 闪电
+    for (let i = bolts.length - 1; i >= 0; i--) {
+      const b = bolts[i];
+      b.age += dt;
+      const t = b.age / b.life;
+      if (t >= 1) {
+        bolts.splice(i, 1);
+        continue;
+      }
+      // 每 ~45ms 重新抖动一次折线，产生电弧闪烁感
+      if (!b.pts || b.age >= b.nextRegen) {
+        const ex = b.x + Math.cos(b.angle) * b.len;
+        const ey = b.y + Math.sin(b.angle) * b.len;
+        b.pts = jagged(b.x, b.y, ex, ey, b.depth, b.len * 0.24);
+        b.nextRegen = b.age + 45;
+      }
+      const alpha = 1 - t;
+      drawBolt(b.pts, b.width, alpha);
+    }
+
+    // 冲击环
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i];
+      r.age += dt;
+      const t = r.age / r.life;
+      if (t >= 1) {
+        rings.splice(i, 1);
+        continue;
+      }
+      const p = 1 - Math.pow(1 - t, 2);
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 6 + (r.r1 - 6) * p, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 214, 10, ' + (0.75 * (1 - t)).toFixed(3) + ')';
+      ctx.lineWidth = 3 * (1 - t) + 0.5;
+      ctx.stroke();
+    }
+
+    // 中心爆闪
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const f = bursts[i];
+      f.age += dt;
+      const t = f.age / f.life;
+      if (t >= 1) {
+        bursts.splice(i, 1);
+        continue;
+      }
+      const radius = f.r1 * (0.35 + 0.65 * (1 - Math.pow(1 - t, 2)));
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, radius);
+      g.addColorStop(0, 'rgba(255, 255, 235, ' + (0.6 * (1 - t)).toFixed(3) + ')');
+      g.addColorStop(0.45, 'rgba(255, 216, 40, ' + (0.26 * (1 - t)).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(255, 200, 0, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 火星
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.age += dt;
+      const t = s.age / s.life;
+      if (t >= 1) {
+        sparks.splice(i, 1);
+        continue;
+      }
+      s.vy += 0.12 * k;
+      s.vx *= 0.97;
+      s.vy *= 0.97;
+      s.x += s.vx * k;
+      s.y += s.vy * k;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * (1 - t * 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 226, 90, ' + (0.9 * (1 - t)).toFixed(3) + ')';
+      ctx.fill();
+    }
+
+    // 轻微全屏闪白
+    if (screenFlash > 0) {
+      screenFlash = Math.max(0, screenFlash - dt / 110);
+      ctx.fillStyle = 'rgba(255, 250, 220, ' + (0.055 * screenFlash).toFixed(4) + ')';
+      ctx.fillRect(0, 0, vw, vh);
+    }
+
+    const busy = bolts.length || rings.length || bursts.length || sparks.length || screenFlash > 0;
+    raf = busy ? requestAnimationFrame(tick) : 0;
+  }
+
+  // ---------- 事件 ----------
+  window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+    if (e.button !== 0) return;
+    if (e.target instanceof Element && e.target.closest('[data-no-fx]')) return;
+    burst(e.clientX, e.clientY);
+  }, { passive: true });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || e.repeat) return;
+    if (e.target instanceof HTMLElement && /INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) return;
+    e.preventDefault();
+    burst(vw / 2, vh * 0.42);
+  });
+
+  // ---------- 控件 ----------
+  const bind = (id, key, fmt) => {
+    const input = document.getElementById(id);
+    const out = document.getElementById(id + 'Out');
+    const sync = () => {
+      cfg[key] = Number(input.value);
+      out.textContent = fmt(cfg[key]);
+    };
+    input.addEventListener('input', sync);
+    sync();
+  };
+
+  bind('scale', 'scale', (v) => v.toFixed(1) + '×');
+  bind('bolts', 'bolts', (v) => String(v));
+  bind('duration', 'duration', (v) => v + 'ms');
+  bind('glow', 'glow', (v) => v.toFixed(1) + '×');
+
+  document.getElementById('sparks').addEventListener('change', (e) => { cfg.sparks = e.target.checked; });
+  document.getElementById('flash').addEventListener('change', (e) => { cfg.flash = e.target.checked; });
+  document.getElementById('reduced').addEventListener('change', (e) => { cfg.reduced = e.target.checked; });
+})();
+</script>
+</body>
+</html>
